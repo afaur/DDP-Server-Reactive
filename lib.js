@@ -174,6 +174,7 @@ var DDPServer = function(opts) {
         deleteProperty: function(_, field) {
           delete doc[field];
           sendChanged(id, {}, [field]);
+          return true;
         }
       });
       for (var client in subscriptions)
@@ -221,6 +222,7 @@ var DDPServer = function(opts) {
       },
       deleteProperty: function(_, id) {
         remove(id);
+        return true;
       }
     });
   }
