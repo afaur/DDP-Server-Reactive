@@ -221,6 +221,7 @@ var DDPServer = function(opts) {
       },
       deleteProperty: function(_, id) {
         remove(id);
+        return true;
       }
     });
   }
