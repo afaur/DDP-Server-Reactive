@@ -1,6 +1,6 @@
 {
   "name": "ddp-server-reactive",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "A ddp server for nodejs with reactive collections",
   "main": "lib.js",
   "scripts": {
