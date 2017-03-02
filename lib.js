@@ -2,6 +2,16 @@ require('harmony-reflect');
 
 var DDPServer = function(opts) {
 
+  var auxFunctions = {
+    login: ({
+      password: pass = undefined, resume: token = undefined,
+      user: { username: user = undefined, email = undefined, } = {}
+    }) => {
+      if (token) return { handleResume: { token } }
+      return { handleLogin: { user, pass, email } }
+    }
+  };
+
   opts = opts || {};
   var WebSocket = require('faye-websocket'),
       EJSON = require('ejson'),
@@ -16,7 +26,7 @@ var DDPServer = function(opts) {
     server = http.createServer()
     server.listen(opts.port || 3000);
   }
-  
+
   server.on('upgrade', function (request, socket, body) {
     if (WebSocket.isWebSocket(request)) {
       var ws = new WebSocket(request, socket, body);
@@ -69,6 +79,46 @@ var DDPServer = function(opts) {
                   errorType: "Meteor.Error"
                 }
               });
+            }
+
+          } else if (data.method === 'login') {
+
+            try {
+              var iResult = auxFunctions[data.method].apply(this, data.params)
+
+              var result = 'Error'
+
+              if (iResult['handleResume']) {
+                result = methods['handleResume'].apply(
+                  this, iResult['handleResume']
+                )
+              } else if (iResult['handleLogin']) {
+                result = methods['handleLogin'].apply(
+                  this, iResult['handleLogin']
+                )
+              }
+
+              sendMessage({
+                msg: "result",
+                id: data.id,
+                result: result
+              });
+
+              sendMessage({
+                msg: "updated",
+                id: data.id
+              })
+
+            } catch (e) {
+              console.log("error calling method", data.method, e)
+              sendMessage({
+                id: data.id,
+                error: {
+                  error: 500,
+                  reason: "Internal Server Error",
+                  errorType: "Meteor.Error"
+                }
+              })
             }
 
           } else {
