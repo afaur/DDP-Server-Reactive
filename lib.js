@@ -9,7 +9,32 @@ var DDPServer = function(opts) {
     }) => {
       if (token) return { handleResume: { token } }
       return { handleLogin: { user, pass, email } }
-    }
+    },
+    error: (e, data, ws) => {
+      console.log("error calling method", data.method, e)
+      sendMessage({
+        id: data.id,
+        error: {
+          error: 500,
+          reason: "Internal Server Error",
+          errorType: "Meteor.Error"
+        }
+      }, ws)
+    },
+    missing: (data, ws) => {
+      console.log("Error method " + data.method + " not found");
+      sendMessage({
+        id: data.id,
+        error: {
+          error: 404,
+          reason: "Method not found",
+          errorType: "Meteor.Error"
+        }
+      }, ws)
+    },
+    sendMessage: (data, ws) => {
+      ws.send(EJSON.stringify(data));
+    },
   };
 
   opts = opts || {};
@@ -33,9 +58,6 @@ var DDPServer = function(opts) {
       var session_id = "" + new Date().getTime();
       subscriptions[session_id] = {};
 
-      function sendMessage(data) {
-        ws.send(EJSON.stringify(data));
-      }
 
       ws.on('message', function(event) {
         var data = JSON.parse(event.data);
@@ -44,10 +66,10 @@ var DDPServer = function(opts) {
 
         case "connect":
 
-          sendMessage({
+          auxFunctions['sendMessage']({
             msg: "connected",
             session: session_id
-          });
+          }, ws)
 
           break;
 
@@ -58,28 +80,18 @@ var DDPServer = function(opts) {
             try {
               var result = methods[data.method].apply(this, data.params)
 
-              sendMessage({
+              auxFunctions['sendMessage']({
                 msg: "result",
                 id: data.id,
                 result: result
-              });
+              }, ws);
 
-              sendMessage({
+              auxFunctions['sendMessage']({
                 msg: "updated",
                 id: data.id
-              })
+              }, ws)
 
-            } catch (e) {
-              console.log("error calling method", data.method, e)
-              sendMessage({
-                id: data.id,
-                error: {
-                  error: 500,
-                  reason: "Internal Server Error",
-                  errorType: "Meteor.Error"
-                }
-              });
-            }
+            } catch (e) { auxFunctions['error'](e, data, ws) }
 
           } else if (data.method === 'login') {
 
@@ -90,49 +102,28 @@ var DDPServer = function(opts) {
 
               if (iResult['handleResume']) {
                 result = methods['handleResume'].apply(
-                  this, iResult['handleResume']
+                  this, [iResult['handleResume']]
                 )
               } else if (iResult['handleLogin']) {
                 result = methods['handleLogin'].apply(
-                  this, iResult['handleLogin']
+                  this, [iResult['handleLogin']]
                 )
               }
 
-              sendMessage({
+              auxFunctions['sendMessage']({
                 msg: "result",
                 id: data.id,
                 result: result
-              });
+              }, ws)
 
-              sendMessage({
+              auxFunctions['sendMessage']({
                 msg: "updated",
                 id: data.id
-              })
+              }, ws)
 
-            } catch (e) {
-              console.log("error calling method", data.method, e)
-              sendMessage({
-                id: data.id,
-                error: {
-                  error: 500,
-                  reason: "Internal Server Error",
-                  errorType: "Meteor.Error"
-                }
-              })
-            }
+            } catch (e) { auxFunctions['error'](e, data, ws) }
 
-          } else {
-            console.log("Error method " + data.method + " not found");
-
-            sendMessage({
-              id: data.id,
-              error: {
-                error: 404,
-                reason: "Method not found",
-                errorType: "Meteor.Error"
-              }
-            });
-          }
+          } else { auxFunctions['missing'](data, ws) }
 
           break;
 
@@ -140,7 +131,7 @@ var DDPServer = function(opts) {
 
           subscriptions[session_id][data.name] = {
             added: function(id, doc) {
-              sendMessage({
+              auxFunctions['sendMessage']({
                 msg: "added",
                 collection: data.name,
                 id: id,
@@ -148,7 +139,7 @@ var DDPServer = function(opts) {
               })
             },
             changed: function(id, fields, cleared) {
-              sendMessage({
+              auxFunctions['sendMessage']({
                 msg: "changed",
                 collection: data.name,
                 id: id,
@@ -157,7 +148,7 @@ var DDPServer = function(opts) {
               })
             },
             removed: function(id) {
-              sendMessage({
+              auxFunctions['sendMessage']({
                 msg: "removed",
                 collection: data.name,
                 id: id
@@ -169,7 +160,7 @@ var DDPServer = function(opts) {
           for (var id in docs)
             subscriptions[session_id][data.name].added(id, docs[id]);
 
-          sendMessage({
+          auxFunctions['sendMessage']({
             msg: "ready",
             subs: [data.id]
           });
@@ -178,7 +169,7 @@ var DDPServer = function(opts) {
 
         case "ping":
 
-          sendMessage({
+          auxFunctions['sendMessage']({
             msg: "pong",
             id: data.id
           });
